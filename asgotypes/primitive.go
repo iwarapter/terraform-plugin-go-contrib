@@ -2,6 +2,7 @@ package asgotypes
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"reflect"
 
@@ -31,6 +32,7 @@ import (
 // involved. When the types are known ahead of time, other helpers are more
 // appropriate.
 type GoPrimitive struct {
+	Type  tftypes.Type
 	Value interface{}
 }
 
@@ -42,8 +44,10 @@ func (dt *GoPrimitive) FromTerraform5Value(value tftypes.Value) error {
 	}
 	if value.IsNull() {
 		dt.Value = nil
+		dt.Type = nil
 		return nil
 	}
+	dt.Type = value.Type()
 	switch {
 	case value.Is(tftypes.String):
 		var str string
@@ -162,4 +166,151 @@ func (dt *GoPrimitive) FromTerraform5Value(value tftypes.Value) error {
 		return nil
 	}
 	return errors.New("unknown type")
+}
+
+// ToTerraform5Value controls how the GoPrimitive will be populated by a
+// tftypes.Value.
+func (dt *GoPrimitive) ToTerraform5Value() (interface{}, error) {
+	if dt.Value == nil {
+		return nil, errors.New("cannot decode unknown values to Go types")
+	}
+
+	return marshal(dt.Value, dt.Type)
+}
+
+func marshal(i interface{}, p tftypes.Type) (tftypes.Value, error) {
+	switch {
+	case p.Is(tftypes.String):
+		return tftypes.NewValue(tftypes.String, i), nil
+	case p.Is(tftypes.Number):
+		return tftypes.NewValue(tftypes.Number, i), nil
+	case p.Is(tftypes.Bool):
+		return tftypes.NewValue(tftypes.Bool, i), nil
+	case p.Is(tftypes.Tuple{}):
+		return marshalTuple(i, p.(tftypes.Tuple))
+	case p.Is(tftypes.List{}):
+		return marshalList(i, p.(tftypes.List))
+	case p.Is(tftypes.Set{}):
+		return marshalSet(i, p.(tftypes.Set))
+	case p.Is(tftypes.Map{}):
+		return marshalMap(i, p.(tftypes.Map))
+	case p.Is(tftypes.Object{}):
+		return marshalObject(i, p.(tftypes.Object))
+	}
+	return tftypes.Value{}, fmt.Errorf("unable to determine type %v", i)
+}
+
+func marshalObject(i interface{}, p tftypes.Object) (tftypes.Value, error) {
+	vals := map[string]tftypes.Value{} //TODO will all maps keys be strings?
+
+	val := reflect.ValueOf(i)
+	switch val.Kind() {
+	case reflect.Map:
+		for _, e := range val.MapKeys() {
+			switch e.Kind() {
+			case reflect.String:
+				v, err := marshal(val.MapIndex(e).Interface(), p.AttributeTypes[e.Interface().(string)])
+				if err != nil {
+					return tftypes.Value{}, fmt.Errorf("cannot marshal kind of %s", val.MapIndex(e).Kind().String())
+				}
+				vals[e.Interface().(string)] = v
+			default:
+				return tftypes.Value{}, fmt.Errorf("cannot marshal kind of %s", e.Kind().String())
+			}
+		}
+	default:
+		return tftypes.Value{}, fmt.Errorf("cannot marshal kind of %s", val.Kind().String())
+	}
+	return tftypes.NewValue(tftypes.Object{
+		AttributeTypes: p.AttributeTypes,
+	}, vals), nil
+}
+
+func marshalTuple(i interface{}, p tftypes.Tuple) (tftypes.Value, error) {
+	vals := []tftypes.Value{}
+
+	v := reflect.ValueOf(i)
+	switch v.Kind() {
+	case reflect.Slice:
+		for i, elementType := range p.ElementTypes {
+			o, err := marshal(v.Index(i).Interface(), elementType)
+			if err != nil {
+				return tftypes.Value{}, err
+			}
+			vals = append(vals, o)
+		}
+	default:
+		return tftypes.Value{}, fmt.Errorf("cannot marshal kind of %s", v.Kind().String())
+	}
+	return tftypes.NewValue(tftypes.Tuple{
+		ElementTypes: p.ElementTypes,
+	}, vals), nil
+}
+
+func marshalMap(i interface{}, p tftypes.Map) (tftypes.Value, error) {
+	vals := map[string]tftypes.Value{} //TODO will all maps keys be strings?
+
+	val := reflect.ValueOf(i)
+	switch val.Kind() {
+	case reflect.Map:
+		for _, e := range val.MapKeys() {
+			switch e.Kind() {
+			case reflect.String:
+				v, err := marshal(val.MapIndex(e).Interface(), p.AttributeType)
+				if err != nil {
+					return tftypes.Value{}, fmt.Errorf("cannot marshal kind of %s", val.MapIndex(e).Kind().String())
+				}
+				vals[e.Interface().(string)] = v
+			default:
+				return tftypes.Value{}, fmt.Errorf("cannot marshal kind of %s", e.Kind().String())
+			}
+		}
+	default:
+		return tftypes.Value{}, fmt.Errorf("cannot marshal kind of %s", val.Kind().String())
+	}
+	return tftypes.NewValue(tftypes.Map{
+		AttributeType: p.AttributeType,
+	}, vals), nil
+}
+
+func marshalList(i interface{}, p tftypes.List) (tftypes.Value, error) {
+	vals := []tftypes.Value{}
+
+	v := reflect.ValueOf(i)
+	switch v.Kind() {
+	case reflect.Slice:
+		for i := 0; i < v.Len(); i++ {
+			o, err := marshal(v.Index(i).Interface(), p.ElementType)
+			if err != nil {
+				return tftypes.Value{}, err
+			}
+			vals = append(vals, o)
+		}
+	default:
+		return tftypes.Value{}, fmt.Errorf("cannot marshal kind of %s", v.Kind().String())
+	}
+	return tftypes.NewValue(tftypes.List{
+		ElementType: p.ElementType,
+	}, vals), nil
+}
+
+func marshalSet(i interface{}, p tftypes.Set) (tftypes.Value, error) {
+	vals := []tftypes.Value{}
+
+	v := reflect.ValueOf(i)
+	switch v.Kind() {
+	case reflect.Slice:
+		for i := 0; i < v.Len(); i++ {
+			o, err := marshal(v.Index(i).Interface(), p.ElementType)
+			if err != nil {
+				return tftypes.Value{}, err
+			}
+			vals = append(vals, o)
+		}
+	default:
+		return tftypes.Value{}, fmt.Errorf("cannot marshal kind of %s", v.Kind().String())
+	}
+	return tftypes.NewValue(tftypes.Set{
+		ElementType: p.ElementType,
+	}, vals), nil
 }

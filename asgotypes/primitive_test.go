@@ -1,6 +1,8 @@
 package asgotypes
 
 import (
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"math/big"
 	"testing"
 
@@ -390,6 +392,10 @@ func TestGoPrimitive(t *testing.T) {
 			if diff := cmp.Diff(testCase.expected, res.Value, cmpOpts...); diff != "" {
 				t.Errorf("Unexpected value (- wanted, + got): %s", diff)
 			}
+
+			v, err := res.ToTerraform5Value()
+			require.Nil(t, err)
+			assert.Equal(t, testCase.tfval, v)
 		})
 	}
 }

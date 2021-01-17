@@ -1,3 +1,5 @@
+# github.com/davecgh/go-spew v1.1.0
+github.com/davecgh/go-spew/spew
 # github.com/golang/protobuf v1.4.2
 github.com/golang/protobuf/proto
 # github.com/google/go-cmp v0.5.4
@@ -10,6 +12,12 @@ github.com/google/go-cmp/cmp/internal/value
 # github.com/hashicorp/terraform-plugin-go v0.2.0
 ## explicit
 github.com/hashicorp/terraform-plugin-go/tfprotov5/tftypes
+# github.com/pmezard/go-difflib v1.0.0
+github.com/pmezard/go-difflib/difflib
+# github.com/stretchr/testify v1.3.0
+## explicit
+github.com/stretchr/testify/assert
+github.com/stretchr/testify/require
 # github.com/vmihailenco/msgpack v4.0.4+incompatible
 github.com/vmihailenco/msgpack
 github.com/vmihailenco/msgpack/codes

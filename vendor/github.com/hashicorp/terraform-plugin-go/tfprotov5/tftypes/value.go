@@ -50,6 +50,11 @@ type Value struct {
 	value interface{}
 }
 
+// Type return the Value Type
+func (val Value) Type() Type {
+	return val.typ
+}
+
 // NewValue returns a Value constructed using the specified Type and stores the
 // passed value in it.
 //
